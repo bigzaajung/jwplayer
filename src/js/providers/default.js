@@ -1,80 +1,92 @@
-define([
-    'utils/helpers',
-    'events/events',
-    'events/states',
-    'utils/underscore'
-], function(utils, events, states, _) {
+import { PLAYER_STATE, MEDIA_TYPE } from 'events/events';
 
-    var noop = utils.noop,
-        returnFalse = _.constant(false);
+const noop = function() {};
+const returnFalse = (() => false);
 
-    var DefaultProvider = {
-        // This function is required to determine if a provider can work on a given source
-        supports : returnFalse,
+/** Audio Track information for tracks returned by {@link Api#getAudioTracks jwplayer().getAudioTracks()}
+ * @typedef {object} AudioTrackOption
+ * @property autoselect
+ * @property defaulttrack
+ * @property groupid
+ * @property {string} language
+ * @property {string} name
+ */
 
-        // Basic playback features
-        play : noop,
-        load : noop,
-        stop : noop,
-        volume : noop,
-        mute : noop,
-        seek : noop,
-        resize : noop,
-        remove : noop,  // removes from page
-        destroy : noop, // frees memory
+/**
+ * @typedef {option} QualityOption
+ * @property {string} label
+ * @property {number} [width]
+ * @property {number} [height]
+ * @property {number} [bitrate]
+ */
 
-        setVisibility : noop,
-        setFullscreen : returnFalse,
-        getFullscreen : noop,
+const DefaultProvider = {
+    // This function is required to determine if a provider can work on a given source
+    supports: returnFalse,
 
-        // If setContainer has been set, this returns the element.
-        //  It's value is used to determine if we should remove the <video> element when setting a new provider.
-        getContainer : noop,
+    // Basic playback features
+    play: noop,
+    preload: noop,
+    load: noop,
+    stop: noop,
+    volume: noop,
+    mute: noop,
+    seek: noop,
+    resize: noop,
+    remove: noop, // removes from page
+    destroy: noop, // frees memory
 
-        // Sets the parent element, causing provider to append <video> into it
-        setContainer : returnFalse,
+    setVisibility: noop,
+    setFullscreen: returnFalse,
+    getFullscreen: noop,
 
-        getName: noop,
-        getQualityLevels : noop,
-        getCurrentQuality : noop,
-        setCurrentQuality : noop,
+    // If setContainer has been set, this returns the element.
+    //  It's value is used to determine if we should remove the <video> element when setting a new provider.
+    getContainer: noop,
 
-        getAudioTracks : noop,
-        getCurrentAudioTrack : noop,
-        setCurrentAudioTrack : noop,
+    // Sets the parent element, causing provider to append <video> into it
+    setContainer: returnFalse,
 
-        // TODO :: The following are targets for removal after refactoring
-        checkComplete : noop,
-        setControls : noop,
-        attachMedia : noop,
-        detachMedia : noop,
+    getName: noop,
 
-        setState: function(state) {
-            var oldState = this.state || states.IDLE;
-            this.state = state;
+    getQualityLevels: noop,
+    getCurrentQuality: noop,
+    setCurrentQuality: noop,
 
-            if (state === oldState) {
-                return;
-            }
+    getAudioTracks: noop,
 
-            this.trigger(events.JWPLAYER_PLAYER_STATE, {
-                newstate: state
-            });
-        },
+    getCurrentAudioTrack: noop,
+    setCurrentAudioTrack: noop,
 
-        sendMediaType : function(levels) {
-            var type = levels[0].type;
-            var isAudioFile = (type === 'oga' || type === 'aac' || type === 'mp3' ||
-                type === 'mpeg' || type === 'vorbis');
+    setPlaybackRate: noop,
+    getPlaybackRate: function() {
+        return 1;
+    },
 
-            this.trigger(events.JWPLAYER_MEDIA_TYPE, {
-                mediaType : isAudioFile ? 'audio' : 'video'
-            });
-        }
-    };
+    // TODO :: The following are targets for removal after refactoring
+    checkComplete: noop,
+    setControls: noop,
+    attachMedia: noop,
+    detachMedia: noop,
+    init: noop,
 
+    setState: function(state) {
+        this.state = state;
 
-    // Make available to other providers for extending
-    return DefaultProvider;
+        this.trigger(PLAYER_STATE, {
+            newstate: state
+        });
+    },
 
-});
+    sendMediaType: function(levels) {
+        var type = levels[0].type;
+        var isAudioFile = (type === 'oga' || type === 'aac' || type === 'mp3' ||
+            type === 'mpeg' || type === 'vorbis');
+
+        this.trigger(MEDIA_TYPE, {
+            mediaType: isAudioFile ? 'audio' : 'video'
+        });
+    }
+};
+
+export default DefaultProvider;

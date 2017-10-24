@@ -1,29 +1,41 @@
-define([
-    'plugins/loader',
-    'plugins/model',
-    'plugins/plugin',
-    'plugins/utils'
-], function(PluginsLoader, PluginsModel, Plugin, pluginsUtils) {
+import PluginsLoader from 'plugins/loader';
+import PluginsModel from 'plugins/model';
+import { log } from 'utils/helpers';
 
-    var _plugins = {},
-        _pluginLoaders = {};
+const pluginsModel = new PluginsModel();
+const pluginLoaders = {};
 
-    var loadPlugins = function(id, config) {
-        _pluginLoaders[id] = new PluginsLoader(new PluginsModel(_plugins), config);
-        return _pluginLoaders[id];
-    };
+function getPluginLoader(id) {
+    pluginLoaders[id] = new PluginsLoader();
+    return pluginLoaders[id];
+}
 
-    var registerPlugin = function(id, target, arg1, arg2) {
-        var pluginId = pluginsUtils.getPluginName(id);
-        if (!_plugins[pluginId]) {
-            _plugins[pluginId] = new Plugin(id);
+export const registerPlugin = function(name, minimumVersion, pluginClass) {
+    let plugin = pluginsModel.addPlugin(name);
+    if (!plugin.js) {
+        plugin.registerPlugin(name, minimumVersion, pluginClass);
+    }
+};
+
+export default function loadPlugins(model, api) {
+    const playerId = model.get('id');
+    const pluginsConfig = model.get('plugins');
+
+    window.jwplayerPluginJsonp = registerPlugin;
+
+    const pluginLoader = getPluginLoader(playerId);
+    return pluginLoader.load(api, pluginsModel, pluginsConfig).then(events => {
+        if (pluginLoader !== pluginLoaders[playerId]) {
+            // Player and plugin loader was replaced
+            return;
         }
-        _plugins[pluginId].registerPlugin(id, target, arg1, arg2);
-    };
-
-
-    return {
-        loadPlugins : loadPlugins,
-        registerPlugin : registerPlugin
-    };
-});
+        if (events) {
+            events.forEach(object => {
+                if (object instanceof Error) {
+                    log(object.message);
+                }
+            });
+        }
+        delete window.jwplayerPluginJsonp;
+    });
+}

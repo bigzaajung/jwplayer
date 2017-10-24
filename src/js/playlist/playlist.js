@@ -1,112 +1,116 @@
-define([
-    'playlist/item',
-    'playlist/source',
-    'utils/underscore',
-    'providers/providers'
-], function(PlaylistItem, Source, _, Providers) {
+import { getPreload } from './preload';
+import PlaylistItem from 'playlist/item';
+import Source from 'playlist/source';
+import Providers from 'providers/providers';
 
-    var Playlist = function (playlist) {
-        // Can be either an array of items or a single item.
-        playlist = (_.isArray(playlist) ? playlist : [playlist]);
+const Playlist = function(playlist) {
+    // Can be either an array of items or a single item.
+    return (Array.isArray(playlist) ? playlist : [playlist]).map(PlaylistItem);
+};
 
-        return _.compact(_.map(playlist, PlaylistItem));
-    };
+/** Go through the playlist and choose a single playable type to play; remove sources of a different type **/
+export function filterPlaylist(playlist, model, feedData) {
+    const list = [];
+    const providers = model.getProviders();
+    const preload = model.get('preload');
+    const itemFeedData = Object.assign({}, feedData);
+    delete itemFeedData.playlist;
 
-    /** Go through the playlist and choose a single playable type to play; remove sources of a different type **/
-    Playlist.filterPlaylist = function(playlist, providers, androidhls, configDrm, preload, feedid, withCredentials) {
-        var list = [];
+    playlist.forEach(function(item) {
+        item = Object.assign({}, item);
 
-        _.each(playlist, function(item) {
-            item = _.extend({}, item);
+        item.preload = getPreload(item.preload, preload);
 
-            item.allSources = _formatSources(item.sources,
-                androidhls,
-                item.drm || configDrm,
-                item.preload || preload,
-                _fallbackIfUndefined(item.withCredentials, withCredentials));
+        item.allSources = formatSources(item, model);
 
-            item.sources = _filterSources(item.allSources, providers);
+        item.sources = filterSources(item.allSources, providers);
 
-            if (!item.sources.length) {
-                return;
-            }
-
-            // include selected file in item for backwards compatibility
-            item.file = item.sources[0].file;
-
-            // set preload for the item, if it is defined
-            if (item.preload || preload) {
-                item.preload = item.preload || preload;
-            }
-
-            // set feedid for the item, if it is defined
-            if (item.feedid || feedid) {
-                item.feedid = item.feedid || feedid;
-            }
-
-            list.push(item);
-        });
-
-        return list;
-    };
-
-    var _formatSources = function(sources, androidhls, itemDrm, preload, withCredentials) {
-        return _.compact(_.map(sources, function(originalSource) {
-            if (! _.isObject(originalSource)) {
-                return;
-            }
-            if (androidhls !== undefined && androidhls !== null) {
-                originalSource.androidhls =  androidhls;
-            }
-
-            if (originalSource.drm || itemDrm) {
-                originalSource.drm = originalSource.drm || itemDrm;
-            }
-
-            if (originalSource.preload || preload) {
-                originalSource.preload = originalSource.preload || preload;
-            }
-
-            // withCredentials is assigned in ascending priority order, source > playlist > model
-            // a false value that is a higher priority than true must result in a false withCredentials value
-            // we don't want undefined if all levels have withCredentials as undefined
-            var cascadedWithCredentials = _fallbackIfUndefined(originalSource.withCredentials, withCredentials);
-            if (!_.isUndefined(cascadedWithCredentials)) {
-                originalSource.withCredentials = cascadedWithCredentials;
-            }
-
-            return Source(originalSource);
-        }));
-    };
-
-    // A playlist item may have multiple different sources, but we want to stick with one.
-    var _filterSources = function(sources, providers) {
-        // legacy plugin support
-        if (!providers || !providers.choose) {
-            providers = new Providers({primary : providers ? 'flash' : null});
+        if (!item.sources.length) {
+            return;
         }
 
-        var bestType = _chooseType(sources, providers);
+        // include selected file in item for backwards compatibility
+        item.file = item.sources[0].file;
 
-        return _.where(sources, {type : bestType});
-    };
-
-    //  Choose from the sources a type which matches our most preferred provider
-    function _chooseType(sources, providers) {
-        for (var i = 0; i < sources.length; i++) {
-            var source = sources[i];
-            var chosenProvider = providers.choose(source);
-            if (chosenProvider) {
-                return source.type;
-            }
+        if (feedData) {
+            item.feedData = itemFeedData;
         }
 
-        return null;
+        list.push(item);
+    });
+
+    return list;
+}
+
+function formatSources(item, model) {
+    const sources = item.sources;
+    const androidhls = model.get('androidhls');
+    const itemDrm = item.drm || model.get('drm');
+    const withCredentials = fallbackIfUndefined(item.withCredentials, model.get('withCredentials'));
+    const hlsjsdefault = model.get('hlsjsdefault');
+
+    return sources.map(function(originalSource) {
+        if (originalSource !== Object(originalSource)) {
+            return null;
+        }
+        if (androidhls !== undefined && androidhls !== null) {
+            originalSource.androidhls = androidhls;
+        }
+
+        if (originalSource.drm || itemDrm) {
+            originalSource.drm = originalSource.drm || itemDrm;
+        }
+
+        originalSource.preload = getPreload(originalSource.preload, item.preload);
+
+        // withCredentials is assigned in ascending priority order, source > playlist > model
+        // a false value that is a higher priority than true must result in a false withCredentials value
+        // we don't want undefined if all levels have withCredentials as undefined
+        const cascadedWithCredentials = fallbackIfUndefined(originalSource.withCredentials, withCredentials);
+        if (cascadedWithCredentials !== undefined) {
+            originalSource.withCredentials = cascadedWithCredentials;
+        }
+
+        if (hlsjsdefault) {
+            originalSource.hlsjsdefault = hlsjsdefault;
+        }
+
+        return Source(originalSource);
+    }).filter(source => !!source);
+}
+
+// A playlist item may have multiple different sources, but we want to stick with one.
+function filterSources(sources, providers) {
+    if (!providers || !providers.choose) {
+        providers = new Providers();
     }
 
-    function _fallbackIfUndefined(value, fallback) {
-        return _.isUndefined(value) ? fallback : value;
+    const chosenProviderAndType = chooseProviderAndType(sources, providers);
+    if (!chosenProviderAndType) {
+        return [];
+    }
+    const provider = chosenProviderAndType.provider;
+    const bestType = chosenProviderAndType.type;
+    return sources.filter(function(source) {
+        return source.type === bestType && providers.providerSupports(provider, source);
+    });
+}
+
+//  Choose from the sources a type which matches our most preferred provider
+function chooseProviderAndType(sources, providers) {
+    for (let i = 0; i < sources.length; i++) {
+        const source = sources[i];
+        const chosenProvider = providers.choose(source);
+        if (chosenProvider) {
+            return { type: source.type, provider: chosenProvider.providerToCheck };
+        }
     }
 
-    return Playlist;
-});
+    return null;
+}
+
+function fallbackIfUndefined(value, fallback) {
+    return (value === undefined) ? fallback : value;
+}
+
+export default Playlist;

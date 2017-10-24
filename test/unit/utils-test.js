@@ -1,22 +1,14 @@
-define([
-    'test/underscore',
-    'utils/helpers'
-], function ( _, utils) {
-    /* jshint qunit: true */
+import utils from 'utils/helpers';
 
-    QUnit.module('utils');
-    var test = QUnit.test.bind(QUnit);
+describe('utils', function() {
 
-    test('utils.log', function(assert) {
-        assert.expect(2);
+    it('utils.log', function() {
         assert.equal(typeof utils.log, 'function', 'is defined');
         assert.strictEqual(utils.log(), undefined, 'utils.log returns undefined');
     });
 
-    test('utils.indexOf', function (assert) {
-        assert.expect(1);
+    it('utils.indexOf', function() {
         assert.equal(typeof utils.indexOf, 'function', 'is defined');
         // provided by underscore 1.6
     });
-
 });

@@ -1,15 +1,12 @@
-define([
-    'utils/helpers'
-], function (utils) {
-    /* jshint qunit: true */
+import utils from 'utils/helpers';
 
-    QUnit.test('defines util functions ', function (assert) {
-        assert.expect(55);
+describe('utils definitions', function() {
 
+    it('defines util functions ', function() {
         // functions in helpers
         assert.equal(typeof utils.log, 'function', 'log function is defined');
         assert.equal(typeof utils.between, 'function', 'between function is defined');
-        assert.equal(typeof utils.foreach , 'function', 'foreach function is defined');
+        assert.equal(typeof utils.foreach, 'function', 'foreach function is defined');
 
         // inherit from parser
         assert.equal(typeof utils.getAbsolutePath, 'function', 'getAbsolutePath function is defined');
@@ -18,34 +15,13 @@ define([
         assert.equal(typeof utils.serialize, 'function', 'serialize function is defined');
         assert.equal(typeof utils.parseDimension, 'function', 'parseDimension function is defined');
         assert.equal(typeof utils.timeFormat, 'function', 'timeFormat function is defined');
-        assert.equal(typeof utils.adaptiveType, 'function', 'adaptiveType function is defined');
 
         // inherit from validator
         assert.equal(typeof utils.exists, 'function', 'exists function is defined');
         assert.equal(typeof utils.isHTTPS, 'function', 'isHTTPS function is defined');
         assert.equal(typeof utils.isRtmp, 'function', 'isRtmp function is defined');
         assert.equal(typeof utils.isYouTube, 'function', 'isYouTube function is defined');
-        assert.equal(typeof utils.youTubeID, 'function', 'youTubeID function is defined');
         assert.equal(typeof utils.typeOf, 'function', 'typeOf function is defined');
-
-        // inherit from browser
-        assert.equal(typeof utils.isFlashSupported, 'function', 'isFlashSupported function is defined');
-        assert.equal(typeof utils.isFF, 'function', 'isFF function is defined');
-        assert.equal(typeof utils.isChrome, 'function', 'isChrome function is defined');
-        assert.equal(typeof utils.isEdge, 'function', 'isEdge function is defined');
-        assert.equal(typeof utils.isIPod, 'function', 'isIPod function is defined');
-        assert.equal(typeof utils.isIPad, 'function', 'isIPad function is defined');
-        assert.equal(typeof utils.isSafari602, 'function', 'isSafari602 function is defined');
-        assert.equal(typeof utils.isIETrident, 'function', 'isIETrident function is defined');
-        assert.equal(typeof utils.isMSIE, 'function', 'isMSIE function is defined');
-        assert.equal(typeof utils.isIE, 'function', 'isIE function is defined');
-        assert.equal(typeof utils.isSafari, 'function', 'isSafari function is defined');
-        assert.equal(typeof utils.isIOS, 'function', 'isIOS function is defined');
-        assert.equal(typeof utils.isAndroidNative, 'function', 'isAndroidNative function is defined');
-        assert.equal(typeof utils.isAndroid, 'function', 'isAndroid function is defined');
-        assert.equal(typeof utils.isMobile, 'function', 'isMobile function is defined');
-        assert.equal(typeof utils.isIframe, 'function', 'isIframe function is defined');
-        assert.equal(typeof utils.flashVersion, 'function', 'flashVersion function is defined');
 
         // inherit from ajax
         assert.equal(typeof utils.ajax, 'function', 'ajax function is defined');
@@ -60,7 +36,6 @@ define([
         assert.equal(typeof utils.toggleClass, 'function', 'toggleClass function is defined');
         assert.equal(typeof utils.emptyElement, 'function', 'emptyElement function is defined');
         assert.equal(typeof utils.addStyleSheet, 'function', 'addStyleSheet function is defined');
-        assert.equal(typeof utils.empty, 'function', 'empty function is defined');
         assert.equal(typeof utils.bounds, 'function', 'bounds function is defined');
 
         // inherit from css
@@ -68,7 +43,7 @@ define([
         assert.equal(typeof utils.style, 'function', 'style function is defined');
         assert.equal(typeof utils.clearCss, 'function', 'clearCss function is defined');
         assert.equal(typeof utils.transform, 'function', 'transform function is defined');
-        assert.equal(typeof utils.hexToRgba, 'function', 'hexToRgba function is defined');
+        assert.equal(typeof utils.getRgba, 'function', 'getRgba function is defined');
 
         // inherit from playerutils
         assert.equal(typeof utils.repo, 'function', 'repo function is defined');

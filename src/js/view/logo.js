@@ -1,118 +1,123 @@
-define([
-    'utils/ui',
-    'utils/helpers',
-    'events/events',
-    'utils/underscore',
-    'utils/backbone.events',
-    'templates/logo.html'
-], function(UI, utils, events, _, Events, logoTemplate) {
-    var _styles = utils.style;
+import logoTemplate from 'templates/logo';
+import { LOGO_CLICK } from 'events/events';
+import UI from 'utils/ui';
+import { style } from 'utils/css';
+import { createElement } from 'utils/dom';
+import Events from 'utils/backbone.events';
 
-    var LogoDefaults = {
-        linktarget: '_blank',
-        margin: 8,
-        hide: false,
-        position: 'top-right'
-    };
+const LogoDefaults = {
+    linktarget: '_blank',
+    margin: 8,
+    hide: false,
+    position: 'top-right'
+};
 
-    var Logo = function(_model) {
-        var _logo,
-            _img = new Image(),
-            _settings,
-            _logoConfig = _.extend({}, _model.get('logo'));
+export default function Logo(_model) {
+    Object.assign(this, Events);
 
-        _.extend(this, Events);
+    var _logo;
+    var _settings;
+    const _img = new Image();
 
-        this.setup = function(container) {
-            _settings = _.extend({}, LogoDefaults, _logoConfig);
-            _settings.hide = (_settings.hide.toString() === 'true');
+    this.setup = function() {
+        _settings = Object.assign({}, LogoDefaults, _model.get('logo'));
+        _settings.position = _settings.position || LogoDefaults.position;
+        _settings.hide = (_settings.hide.toString() === 'true');
 
-            _logo = utils.createElement(logoTemplate());
+        // We should only create a logo in the display container when
+        // it is not supposed to be in the control bar, as it will
+        // handle the creation in that case
+        if (!_settings.file || _settings.position === 'control-bar') {
+            return;
+        }
 
-            if (!_settings.file) {
-                return;
-            }
+        if (!_logo) {
+            _logo = createElement(logoTemplate(_settings.position, _settings.hide));
+        }
 
-            if (_settings.hide) {
-                // This causes it to fade out when jw-flag-user-inactive
-                utils.addClass(_logo, 'jw-hide');
-            }
+        _model.set('logo', _settings);
 
-            utils.addClass(_logo, 'jw-logo-' + (_settings.position || LogoDefaults.position));
-
-            // respond to dock/controls changes when top positioned
-            if (_settings.position === 'top-right') {
-                _model.on('change:dock', this.topRight, this);
-                _model.on('change:controls', this.topRight, this);
-                this.topRight(_model);
-            }
-
-            _model.set('logo', _settings);
-
-            // apply styles onload when image width and height are known
-            _img.onload = function() {
-                // update logo style
-                var style = {
-                    backgroundImage: 'url("' + this.src +'")',
-                    width: this.width,
-                    height: this.height
-                };
-                if(_settings.margin !== LogoDefaults.margin) {
-                    var positions = (/(\w+)-(\w+)/).exec(_settings.position);
-                    if (positions.length === 3){
-                        style['margin-'+positions[1]] = _settings.margin;
-                        style['margin-'+positions[2]] = _settings.margin;
-                    }
-                }
-                _styles(_logo, style);
-
-                // update title
-                _model.set('logoWidth', style.width);
+        // apply styles onload when image width and height are known
+        _img.onload = function () {
+            // update logo style
+            let height = this.height;
+            let width = this.width;
+            const styles = {
+                backgroundImage: 'url("' + this.src + '")'
             };
-
-            _img.src = _settings.file;
-
-            var logoInteractHandler = new UI(_logo);
-            logoInteractHandler.on('click tap', function(evt) {
-                if (utils.exists(evt) && evt.stopPropagation) {
-                    evt.stopPropagation();
+            if (_settings.margin !== LogoDefaults.margin) {
+                const positions = (/(\w+)-(\w+)/).exec(_settings.position);
+                if (positions.length === 3) {
+                    styles['margin-' + positions[1]] = _settings.margin;
+                    styles['margin-' + positions[2]] = _settings.margin;
                 }
+            }
 
-                this.trigger(events.JWPLAYER_LOGO_CLICK, {
-                    link: _settings.link,
-                    linktarget: _settings.linktarget
-                });
+            // Constraint logo size to 15% of their respective player dimension
+            const maxHeight = _model.get('containerHeight') * 0.15;
+            const maxWidth = _model.get('containerWidth') * 0.15;
 
-            }, this);
+            if (height > maxHeight || width > maxWidth) {
+                const logoAR = width / height;
+                const videoAR = maxWidth / maxHeight;
 
-            container.appendChild(_logo);
+                if (videoAR > logoAR) {
+                    // height = max dimension
+                    height = maxHeight;
+                    width = maxHeight * logoAR;
+                } else {
+                    // width = max dimension
+                    width = maxWidth;
+                    height = maxWidth / logoAR;
+                }
+            }
+
+            styles.width = Math.round(width);
+            styles.height = Math.round(height);
+
+            style(_logo, styles);
+
+            // update title
+            _model.set('logoWidth', styles.width);
         };
 
-        this.topRight = function(model) {
-            // move the logo down when dock buttons are displayed
-            var controls = model.get('controls');
-            var dockButtons = model.get('dock');
-            var dockButtonsVisible = controls && (dockButtons && dockButtons.length ||
-                model.get('sharing') || model.get('related'));
-            _styles(_logo, {
-                top: (dockButtonsVisible ? '3.5em' : 0)
+        _img.src = _settings.file;
+
+        const logoInteractHandler = new UI(_logo);
+
+        if (_settings.link) {
+            _logo.setAttribute('tabindex', '0');
+            _logo.setAttribute('aria-label', 'Logo');
+        }
+
+        logoInteractHandler.on('click tap enter', function (evt) {
+            if (evt && evt.stopPropagation) {
+                evt.stopPropagation();
+            }
+
+            this.trigger(LOGO_CLICK, {
+                link: _settings.link,
+                linktarget: _settings.linktarget
             });
-        };
 
-        this.element = function() {
-            return _logo;
-        };
-
-        this.position = function() {
-            return _settings.position;
-        };
-
-        this.destroy = function() {
-            _img.onload = null;
-        };
-
-        return this;
+        }, this);
     };
 
-    return Logo;
-});
+    this.setContainer = function(container) {
+        if (_logo) {
+            container.appendChild(_logo);
+        }
+    };
+
+    this.element = function() {
+        return _logo;
+    };
+
+    this.position = function() {
+        return _settings.position;
+    };
+
+    this.destroy = function() {
+        _img.onload = null;
+    };
+}

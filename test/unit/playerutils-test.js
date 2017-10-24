@@ -1,24 +1,33 @@
-define([
-    'utils/playerutils',
-    'version'
-], function (playerutils, version) {
-    /* jshint qunit: true */
+import { version } from 'version';
+import { getScriptPath, versionCheck } from 'utils/playerutils';
 
-    QUnit.module('playerutils');
+describe('playerutils', function() {
 
-    QUnit.test('playerutils.versionCheck', function(assert) {
-        var versionCheck = playerutils.versionCheck('0.5');
-        assert.ok(versionCheck, 'playerutils.versionCheck with valid version');
-
-        versionCheck = playerutils.versionCheck('99.1');
-        assert.notOk(versionCheck, 'playerutils.versionCheck with invalid version');
-
-        var jParts = version.split(/\W/);
-        var jMajor = parseFloat(jParts[0]);
-        var jMinor = parseFloat(jParts[1]);
-
-        versionCheck = playerutils.versionCheck(jMajor + ' ' + (jMinor + 1));
-        assert.notOk(versionCheck, 'playerutils.versionCheck with higher version');
+    it('versionCheck with valid version', function() {
+        const versionRequirementMet = versionCheck('0.5');
+        assert.isOk(versionRequirementMet);
     });
 
+    it('versionCheck with invalid version', function() {
+        const versionRequirementMet = versionCheck('99.1');
+        assert.isNotOk(versionRequirementMet);
+    });
+
+    it('versionCheck with higher version', function() {
+        const jParts = version.split(/\W/);
+        const jMajor = parseFloat(jParts[0]);
+        const jMinor = parseFloat(jParts[1]);
+        const versionRequirementMet = versionCheck(jMajor + ' ' + (jMinor + 1));
+        assert.isNotOk(versionRequirementMet);
+    });
+
+    it('getScriptPath returns an empty string when no file name is provided', function() {
+        const path = getScriptPath(null);
+        assert.equal(path, '');
+    });
+
+    it('getScriptPath returns a directory url ending with a forward slash', function() {
+        const scriptPath = getScriptPath('sinon.js');
+        assert.isOk(/\S+\:\/\/.+\/$/.test(scriptPath), ' for "sinon.js" returned "' + scriptPath + '"');
+    });
 });

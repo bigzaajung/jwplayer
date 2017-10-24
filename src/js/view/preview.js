@@ -1,101 +1,73 @@
-define([
-    'utils/underscore',
-    'utils/helpers'
-], function(_, utils) {
-    var Preview = function(_model) {
-        this.model = _model;
+import { style } from 'utils/css';
 
-        _model.on('change:playlistItem', onPlaylistItem, this);
-        _model.on('change:mediaModel', onMediaModel, this);
-    };
+const Preview = function(_model) {
+    this.model = _model;
+    this.image = null;
+};
 
-    function onMediaModel(model, mediaModel) {
-        mediaModel.off('change:mediaType', null, this);
-        mediaModel.on('change:mediaType', function(mediaModel, mediaType) {
-            if (mediaType === 'audio') {
-                this.setImage(model.get('playlistItem').image);
-            }
-        }, this);
-    }
+function validState(state) {
+    return state === 'complete' || state === 'idle' || state === 'error';
+}
 
-    function onPlaylistItem(model, playlistItem) {
-        var delayPosterLoad = (model.get('autostart') && !utils.isMobile()) ||
-            (model.get('item') > 0);
-
-        if (delayPosterLoad) {
-            this.setImage(null);
-            model.off('change:state', null, this);
-            model.on('change:state', function(model, state) {
-                if (state === 'complete' || state === 'idle' || state === 'error') {
-                    this.setImage(playlistItem.image);
-                    this.resize(null, null, model.get('stretching'));
-                }
-            }, this);
+Object.assign(Preview.prototype, {
+    setup: function(element) {
+        this.el = element;
+    },
+    setImage: function(img) {
+        // Remove onload function from previous image
+        var image = this.image;
+        if (image) {
+            image.onload = null;
+        }
+        this.image = null;
+        if (!validState(this.model.get('state'))) {
             return;
         }
-
-        this.setImage(playlistItem.image);
-    }
-
-    _.extend(Preview.prototype, {
-        setup: function(element) {
-            this.el = element;
-            var playlistItem = this.model.get('playlistItem');
-            if (playlistItem) {
-                this.setImage(playlistItem.image);
+        this.model.off('change:state', null, this);
+        var backgroundImage = '';
+        if (typeof img === 'string') {
+            backgroundImage = 'url("' + img + '")';
+            image = this.image = new Image();
+            image.src = img;
+        }
+        style(this.el, {
+            backgroundImage: backgroundImage
+        });
+    },
+    resize: function(width, height, stretching) {
+        if (stretching === 'uniform') {
+            if (width) {
+                this.playerAspectRatio = width / height;
             }
-        },
-        setImage: function(img) {
-            // Remove onload function from previous image
+            if (!this.playerAspectRatio ||
+                !this.image ||
+                !validState(this.model.get('state'))) {
+                return;
+            }
+            // snap image to edges when the difference in aspect ratio is less than 9%
             var image = this.image;
+            var backgroundSize = null;
             if (image) {
-                image.onload = null;
-                this.image = null;
-            }
-            this.model.off('change:state', null, this);
-            var backgroundImage = '';
-            if (_.isString(img)) {
-                backgroundImage = 'url("' + img + '")';
-                image = this.image = new Image();
-                image.src = img;
-            }
-            utils.style(this.el, {
-                backgroundImage: backgroundImage
-            });
-        },
-        resize: function(width, height, stretching) {
-            if (stretching === 'uniform') {
-                if (width) {
-                    this.playerAspectRatio = width / height;
-                }
-                if (!this.playerAspectRatio) {
+                if (image.width === 0) {
+                    var _this = this;
+                    image.onload = function() {
+                        _this.resize(width, height, stretching);
+                    };
                     return;
                 }
-                // snap image to edges when the difference in aspect ratio is less than 9%
-                var image = this.image;
-                var backgroundSize = null;
-                if (image) {
-                    if (image.width === 0) {
-                        var _this = this;
-                        image.onload = function() {
-                            _this.resize(width, height, stretching);
-                        };
-                        return;
-                    }
-                    var imageAspectRatio = image.width / image.height;
-                    if (Math.abs(this.playerAspectRatio - imageAspectRatio) < 0.09) {
-                        backgroundSize = 'cover';
-                    }
+                var imageAspectRatio = image.width / image.height;
+                if (Math.abs(this.playerAspectRatio - imageAspectRatio) < 0.09) {
+                    backgroundSize = 'cover';
                 }
-                utils.style(this.el, {
-                    backgroundSize: backgroundSize
-                });
             }
-        },
-        element: function() {
-            return this.el;
+            style(this.el, {
+                backgroundSize: backgroundSize
+            });
         }
-    });
-
-    return Preview;
+    },
+    element: function() {
+        return this.el;
+    }
 });
+
+export default Preview;

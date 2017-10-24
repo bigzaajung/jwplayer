@@ -1,60 +1,53 @@
-define([
-    'test/underscore',
-    'playlist/item'
-], function (_, item) {
-    /* jshint qunit: true */
+import item from 'playlist/item';
+import _ from 'test/underscore';
 
-    QUnit.module('playlist item');
-    var test = QUnit.test.bind(QUnit);
+describe('playlist item', function() {
 
-    // http://support.jwplayer.com/customer/portal/articles/1413113-configuration-options-reference
-    function testItem(assert, config) {
+    function testItem(config) {
         var x = item(config);
 
-        assert.ok(_.isObject(x), 'Item generated from ' + config + ' input');
-        assert.ok(_.isArray(x.sources), 'Item has sources array');
-        assert.ok(_.isArray(x.tracks), 'Item has tracks array');
+        assert.isOk(_.isObject(x), 'Item generated from ' + config + ' input');
+        assert.isOk(_.isArray(x.sources), 'Item has sources array');
+        assert.isOk(_.isArray(x.tracks), 'Item has tracks array');
         return x;
     }
 
     // Check for the attrs which testItem does not
-    function testItemComplete(assert, config) {
-        var item = testItem(assert, config);
+    function testItemComplete(config) {
+        var playlistItem = testItem(config);
 
-        var attrs = ['image', 'description', 'mediaid', 'title'];
-        _.each(attrs, function(a) {
-            assert.ok(_.has(item, a), 'Item has ' + a + ' attribute');
+        var attrs = ['image', 'description', 'mediaid', 'title', 'minDvrWindow'];
+        _.each(attrs, function (a) {
+            assert.isOk(_.has(playlistItem, a), 'Item has ' + a + ' attribute');
         });
 
-        return item;
+        return playlistItem;
     }
 
-    test('worst case input arguments are handled', function(assert) {
-
-        testItem(assert);
-        testItem(assert, undefined);
-        testItem(assert, {});
-        testItem(assert, true);
-        testItem(assert, false);
-        testItem(assert, {title : 'hi', sources: false});
-        testItem(assert, {title : 'hi', sources: {}});
-        testItem(assert, {tracks: [{}, null]});
-        testItem(assert, {tracks: 1});
+    it('worst case input arguments are handled', function() {
+        testItem();
+        testItem(undefined);
+        testItem({});
+        testItem(true);
+        testItem(false);
+        testItem({ title: 'hi', sources: false });
+        testItem({ title: 'hi', sources: {} });
+        testItem({ tracks: [{}, null] });
+        testItem({ tracks: 1 });
     });
 
-    test('input with multiple sources, a default and captions track', function(assert) {
-        var x = testItemComplete(assert, {
+    it('input with multiple sources, a default and captions track', function() {
+        var x = testItemComplete({
             image: 'image.png',
             description: 'desc',
             sources: [
                 {
                     file: 'f1.mp4',
                     label: 'f1 label'
-                    //'default' : true,
                 },
                 {
                     file: 'rtmp://f2',
-                    'default' : true
+                    'default': true
                 },
                 {
                     file: 'https://www.youtube.com/watch?v=zKtAuflyc5w'
@@ -68,9 +61,7 @@ define([
             tracks: [
                 {
                     file: 'fake.vtt',
-                    //kind: 'captions',
                     label: 'track label'
-                    //'default': true
                 }
             ]
         });
@@ -80,8 +71,8 @@ define([
         assert.equal(x.sources[1].file, 'rtmp://f2', 'Second source file is correct');
         assert.equal(x.sources[2].file, 'https://www.youtube.com/watch?v=zKtAuflyc5w', 'Third source file is correct');
         assert.equal(x.sources.length, 3, 'Sources whose types cannot be determined are removed');
-        assert.ok(!x.sources[0]['default'], 'First source was not set to default');
-        assert.equal(x.sources[1]['default'], true, 'Second source was set to default');
+        assert.isOk(!x.sources[0].default, 'First source was not set to default');
+        assert.equal(x.sources[1].default, true, 'Second source was set to default');
         assert.equal(x.sources[0].label, 'f1 label', 'First source label matches input.source[0].label');
         assert.equal(x.sources[1].label, '1', 'Second source label is assigned 1');
 
@@ -92,8 +83,8 @@ define([
 
     });
 
-    test('input source type normalization', function(assert) {
-        var x = testItem(assert, {
+    it('input source type normalization', function() {
+        var x = testItem({
             sources: [
                 {
                     file: 'f1.mp4'
@@ -131,21 +122,21 @@ define([
 
     });
 
-    test('input.levels are converted to sources', function(assert) {
-        var x = testItem(assert, {
+    it('input.levels are converted to sources', function() {
+        var x = testItem({
             levels: [{
                 file: 'f1.mp4',
-                label : 'f1 label',
-                //'default' : true,
-                type : 'mp4'
+                label: 'f1 label',
+                // 'default' : true,
+                type: 'mp4'
             }]
         });
 
         assert.equal(x.sources[0].file, 'f1.mp4', 'first source file matches input.levels[0].file');
     });
 
-    test('input.captions are converted to tracks', function(assert) {
-        var x = testItem(assert, {
+    it('input.captions are converted to tracks', function() {
+        var x = testItem({
             file: 'x',
             captions: [
                 {
@@ -158,13 +149,13 @@ define([
         assert.equal(x.tracks[0].file, 'fake.vtt', 'First track file matches input.captions[0].file');
     });
 
-    test('property passthrough of unknown values', function(assert) {
-        var x = testItem(assert, {
+    it('property passthrough of unknown values', function() {
+        var x = testItem({
             file: 'x',
-            randomStr : 'rrr',
+            randomStr: 'rrr',
             adSchedule: {
                 adbreak: {
-                    tag : 'hi'
+                    tag: 'hi'
                 }
             }
         });
@@ -173,13 +164,13 @@ define([
         assert.equal(x.randomStr, 'rrr', 'Passes through unknown values');
     });
 
-    test('input.sources may contain one source object instead of array', function(assert) {
-        var x = testItem(assert, {
+    it('input.sources may contain one source object instead of array', function() {
+        var x = testItem({
             sources: {
                 file: 'f1.mp4',
-                label : 'f1 label',
-                //'default' : true,
-                type : 'mp4'
+                label: 'f1 label',
+                // 'default' : true,
+                type: 'mp4'
             }
         });
 

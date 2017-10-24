@@ -1,140 +1,84 @@
-define([
-    'utils/helpers',
-    'plugins/utils',
-    'events/events',
-    'utils/backbone.events',
-    'utils/scriptloader',
-    'utils/underscore'
-], function(utils, pluginsUtils, events, Events, scriptloader, _) {
+import { resolved } from 'polyfills/promise';
+import ScriptLoader from 'utils/scriptloader';
+import { getAbsolutePath } from 'utils/parser';
+import { extension } from 'utils/strings';
 
-    var pluginmodes = {
-        FLASH: 0,
-        JAVASCRIPT: 1,
-        HYBRID: 2
-    };
+const PLUGIN_PATH_TYPE_ABSOLUTE = 0;
+const PLUGIN_PATH_TYPE_RELATIVE = 1;
+const PLUGIN_PATH_TYPE_CDN = 2;
 
-    var Plugin = function(url) {
-        var _this = _.extend(this, Events),
-            _status = scriptloader.loaderstatus.NEW,
-            _flashPath,
-            _js,
-            _target,
-            _completeTimeout;
+const getPluginPathType = function (path) {
+    if (typeof path !== 'string') {
+        return;
+    }
+    path = path.split('?')[0];
+    var protocol = path.indexOf('://');
+    if (protocol > 0) {
+        return PLUGIN_PATH_TYPE_ABSOLUTE;
+    }
+    var folder = path.indexOf('/');
+    var fileExtension = extension(path);
+    if (protocol < 0 && folder < 0 && (!fileExtension || !isNaN(fileExtension))) {
+        return PLUGIN_PATH_TYPE_CDN;
+    }
+    return PLUGIN_PATH_TYPE_RELATIVE;
+};
 
-        function getJSPath() {
-            switch (pluginsUtils.getPluginPathType(url)) {
-                case pluginsUtils.pluginPathType.ABSOLUTE:
-                    return url;
-                case pluginsUtils.pluginPathType.RELATIVE:
-                    return utils.getAbsolutePath(url, window.location.href);
-            }
-        }
-
-        function completeHandler() {
-            _.defer(function() {
-                _status = scriptloader.loaderstatus.COMPLETE;
-                _this.trigger(events.COMPLETE);
-            });
-        }
-
-        function errorHandler() {
-            _status = scriptloader.loaderstatus.ERROR;
-            _this.trigger(events.ERROR, {url: url});
-        }
-
-        this.load = function() {
-            if (_status !== scriptloader.loaderstatus.NEW) {
-                return;
-            }
-            if (url.lastIndexOf('.swf') > 0) {
-                _flashPath = url;
-                _status = scriptloader.loaderstatus.COMPLETE;
-                _this.trigger(events.COMPLETE);
-                return;
-            }
-            if (pluginsUtils.getPluginPathType(url) === pluginsUtils.pluginPathType.CDN) {
-                _status = scriptloader.loaderstatus.COMPLETE;
-                _this.trigger(events.COMPLETE);
-                return;
-            }
-            _status = scriptloader.loaderstatus.LOADING;
-            var _loader = new scriptloader(getJSPath());
-            // Complete doesn't matter - we're waiting for registerPlugin
-            _loader.on(events.COMPLETE, completeHandler);
-            _loader.on(events.ERROR, errorHandler);
-            _loader.load();
-        };
-
-        this.registerPlugin = function(id, target, arg1, arg2) {
-            if (_completeTimeout) {
-                clearTimeout(_completeTimeout);
-                _completeTimeout = undefined;
-            }
-            _target = target;
-            if (arg1 && arg2) {
-                _flashPath = arg2;
-                _js = arg1;
-            } else if (typeof arg1 === 'string') {
-                _flashPath = arg1;
-            } else if (typeof arg1 === 'function') {
-                _js = arg1;
-            } else if (!arg1 && !arg2) {
-                _flashPath = id;
-            }
-            _status = scriptloader.loaderstatus.COMPLETE;
-            _this.trigger(events.COMPLETE);
-        };
-
-        this.getStatus = function() {
-            return _status;
-        };
-
-        this.getPluginName = function() {
-            return pluginsUtils.getPluginName(url);
-        };
-
-        this.getFlashPath = function() {
-            if (_flashPath) {
-                switch (pluginsUtils.getPluginPathType(_flashPath)) {
-                    case pluginsUtils.pluginPathType.ABSOLUTE:
-                        return _flashPath;
-                    case pluginsUtils.pluginPathType.RELATIVE:
-                        if (url.lastIndexOf('.swf') > 0) {
-                            return utils.getAbsolutePath(_flashPath, window.location.href);
-                        }
-                        return utils.getAbsolutePath(_flashPath, getJSPath());
-                }
-            }
-            return null;
-        };
-
-        this.getJS = function() {
-            return _js;
-        };
-
-        this.getTarget = function() {
-            return _target;
-        };
-
-        this.getPluginmode = function() {
-            if (typeof _flashPath !== undefined && typeof _js !== undefined) {
-                return pluginmodes.HYBRID;
-            } else if (typeof _flashPath !== undefined) {
-                return pluginmodes.FLASH;
-            } else if (typeof _js !== undefined) {
-                return pluginmodes.JAVASCRIPT;
-            }
-        };
-
-        this.getNewInstance = function(api, config, div) {
-            return new _js(api, config, div);
-        };
-
-        this.getURL = function() {
+function getJSPath(url) {
+    switch (getPluginPathType(url)) {
+        case PLUGIN_PATH_TYPE_ABSOLUTE:
             return url;
+        case PLUGIN_PATH_TYPE_RELATIVE:
+            return getAbsolutePath(url, window.location.href);
+        default:
+            break;
+    }
+}
+
+const Plugin = function(url) {
+    this.url = url;
+};
+
+Object.assign(Plugin.prototype, {
+    load() {
+        if (getPluginPathType(this.url) === PLUGIN_PATH_TYPE_CDN) {
+            return resolved;
+        }
+        const loader = new ScriptLoader(getJSPath(this.url));
+        this.loader = loader;
+        return loader.load();
+    },
+
+    registerPlugin(name, minimumVersion, pluginClass) {
+        this.name = name;
+        this.target = minimumVersion;
+        this.js = pluginClass;
+    },
+
+    getNewInstance(api, config, div) {
+        const PluginClass = this.js;
+        const pluginInstance = new PluginClass(api, config, div);
+
+        pluginInstance.addToPlayer = function() {
+            const overlaysElement = api.getContainer().querySelector('.jw-overlays');
+            if (!overlaysElement) {
+                return;
+            }
+            div.left = overlaysElement.style.left;
+            div.top = overlaysElement.style.top;
+            overlaysElement.appendChild(div);
+            pluginInstance.displayArea = overlaysElement;
         };
-    };
 
-    return Plugin;
+        pluginInstance.resizeHandler = function() {
+            const displayarea = pluginInstance.displayArea;
+            if (displayarea) {
+                pluginInstance.resize(displayarea.clientWidth, displayarea.clientHeight);
+            }
+        };
 
+        return pluginInstance;
+    }
 });
+
+export default Plugin;

@@ -1,64 +1,77 @@
-define([
-    'test/underscore',
-    'jquery',
-    'api/api',
-    'data/api-members',
-    'data/api-methods',
-    'data/api-methods-chainable',
-    'data/config-small',
-    'utils/backbone.events',
-    'providers/html5',
-    'providers/flash'
-], function (_, $, Api, apiMembers, apiMethods, apiMethodsChainable, configSmall, Events,
-             providerHtml5, providerFlash) {
-    /* jshint qunit: true */
+import jwplayer from 'jwplayer';
+import instances from 'api/players';
+import Api from 'api/api';
+import ApiSettings from 'api/api-settings';
+import _ from 'test/underscore';
+import sinon from 'sinon';
+import $ from 'jquery';
+import apiMembers from 'data/api-members';
+import apiMethods from 'data/api-methods';
+import apiMethodsChainable from 'data/api-methods-chainable';
+import apiMethodsDeprecated from 'data/api-methods-deprecated';
+import Events from 'utils/backbone.events';
+import utils from 'utils/helpers';
+import {
+    install as installVideoPolyfill,
+    uninstall as uninstallVideoPolyfill
+} from 'mock/video-element-polyfill';
 
-    // polyfill webpack require.ensure
-    //window.jwplayer.api = Api;
-    require.ensure = function(array, callback, moduleName) {
-        console.log('Unit test polyfill for webpack require.ensure', '"'+ moduleName + '"');
-        callback(function webpackRequire(modulePath) {
-            return ({
-                'providers/html5': providerHtml5,
-                'providers/flash': providerFlash
-            })[modulePath];
-        });
-    };
+describe('Api', function() {
 
-    var vid = document.createElement('video');
-    var BROWSER_SUPPORTS_VIDEO = (!!vid.load);
+    beforeEach(function() {
+        installVideoPolyfill();
+        utils.log = sinon.stub();
+    });
 
-    QUnit.module('Api');
-    var test = QUnit.test.bind(QUnit);
+    afterEach(function() {
+        // remove fixture and player instances
+        $('#player').remove();
+        for (let i = instances.length; i--;) {
+            instances[i].remove();
+        }
+        utils.log.reset();
+        uninstallVideoPolyfill();
+    });
 
-    test('extends Events', function(assert) {
-        var api = createApi('player');
-        _.each(Events, function(value, key) {
-            var itExtends = api[key] === value;
-            var itOverrides = _.isFunction(api[key]);
-            var action = itExtends ? 'extends' : (itOverrides ? 'overrides' : 'does not implement');
-            assert.ok(itExtends || itOverrides, 'api.'+key +' '+ action +' Events.'+key);
+    it('instances has a uniqueIds greater than 0', function() {
+        // We expect uniqueId to be truthy to quickly validate player instances with `!!jwplayer(i).uniqueId`
+        // jwplayer() always returns an object even when the query doesn't match. In that case uniqueId is falsy
+        const api = createApi('player');
+        expect(api.uniqueId).to.be.above(0);
+    });
+
+    it('extends Events', function() {
+        const api = createApi('player');
+        _.each(Events, function (value, key) {
+            const itExtends = api[key] === value;
+            const itOverrides = _.isFunction(api[key]);
+            const action = itExtends ? 'extends' : (itOverrides ? 'overrides' : 'does not implement');
+            assert.isOk(itExtends || itOverrides, 'api.' + key + ' ' + action + ' Events.' + key);
         });
     });
 
-    test('api.trigger works', function(assert) {
-        var api = createApi('player');
-        var check = false;
+    it('api.trigger works', function() {
+        const api = createApi('player');
+        let check = false;
+
         function update() {
             check = true;
         }
+
         api.on('x', update);
         api.trigger('x');
 
-        assert.ok(check, 'api.trigger works');
+        assert.isOk(check, 'api.trigger works');
     });
 
-    test('api.off works', function(assert) {
-        var api = createApi('player');
-        var check = false;
+    it('api.off works', function() {
+        const api = createApi('player');
+        let check = false;
+
         function update() {
             check = true;
         }
+
         api.on('x', update);
         api.off('x', update);
         api.trigger('x');
@@ -66,60 +79,53 @@ define([
         assert.equal(check, false, 'api.off works');
     });
 
-    test('bad events don\'t break player', function(assert) {
-        window.jwplayer = window.jwplayer || {};
-        delete window.jwplayer.debug;
+    it('bad events do not break player', function() {
+        ApiSettings.debug = false;
 
-        var api = createApi('player');
-        var check = false;
-        function update() {
-            check = true;
-        }
-        function bad() {
-            throw TypeError('blah');
-        }
+        console.log = sinon.stub();
 
-        api.on('x', bad);
-        api.on('x', update);
-        api.on('x', bad);
+        const api = createApi('player');
+        const validEvent = sinon.stub();
+        const invalidEvent = sinon.stub().throws("TypeError");
 
-        api.trigger('x');
+        api.on('x', invalidEvent);
+        api.on('x', validEvent);
+        api.on('x', invalidEvent);
 
-        assert.ok(check, 'When events blow up, handler continues');
-    });
-
-    test('throws exceptions when debug is true', function(assert) {
-        window.jwplayer = window.jwplayer || {};
-        window.jwplayer.debug = true;
-
-        var api = createApi('player');
-
-        function bad() {
-            throw TypeError('blah');
-        }
-
-        api.on('x', bad);
-
-        assert.throws(function() {
+        expect(() => {
             api.trigger('x');
-        }, TypeError, 'exceptions are not caught when jwplayer.debug = true');
+        }).to.not.throw();
 
-        delete window.jwplayer.debug;
+        expect(invalidEvent.callCount).to.equal(2);
+        expect(validEvent.callCount).to.equal(1);
+        expect(console.log.callCount).to.equal(2);
+
+        console.log.reset();
     });
 
-    test('rendering mode is html5', function(assert) {
-        var api = createApi('player');
+    it('throws exceptions when debug is true', function() {
+        jwplayer.debug = true;
 
-        assert.equal(api.getRenderingMode(), 'html5', 'api.getRenderingMode() returns "html5"');
+        const api = createApi('player');
+
+        function invalidEvent() {
+            throw new TypeError('blah');
+        }
+
+        api.on('x', invalidEvent);
+
+        expect(function() {
+            api.trigger('x');
+        }).to.throw();
+
+        jwplayer.debug = false;
     });
 
-    test('can be removed and reused', function(assert) {
-        var api = createApi('player', function(instance) {
-            assert.strictEqual(instance, api, 'globalRemovePlayer is called with api instance');
-        });
+    it('can be removed and reused', function(done) {
+        const api = createApi('player');
 
-        var removeCount = 0;
-        api.on('remove', function(event) {
+        let removeCount = 0;
+        api.on('remove', function (event) {
             assert.equal(++removeCount, 1, 'first remove event callback is triggered first once');
             assert.equal(event.type, 'remove', 'event type is "remove"');
             assert.strictEqual(this, api, 'callback context is the removed api instance');
@@ -129,34 +135,19 @@ define([
 
         api.setup({}).on('remove', function() {
             assert.equal(++removeCount, 2, 'second remove event callback is triggered second');
+            done();
         }).remove();
     });
 
-    test('replaces and restores container', function(assert) {
-        var originalContainer = createContainer('player');
-        var api = new Api(originalContainer, _.noop);
-
-        var elementInDom = document.getElementById('player');
-        assert.strictEqual(elementInDom, originalContainer, 'container is not replaced before setup');
-
-        api.setup({});
-        elementInDom = document.getElementById('player');
-        assert.notEqual(elementInDom, originalContainer, 'container is replaced after setup');
-
-        api.remove();
-        elementInDom = document.getElementById('player');
-        assert.strictEqual(elementInDom, originalContainer, 'container is restored after remove');
-    });
-
-    test('event dispatching', function(assert) {
-        var api = createApi('player');
-        var originalEvent = {
+    it('event dispatching', function() {
+        const api = createApi('player');
+        const originalEvent = {
             type: 'original'
         };
 
-        api.on('test', function(event) {
+        api.on('test', function (event) {
             assert.equal(event.type, 'test', 'event type matches event name');
-            assert.ok(_.isObject(event) && event !== originalEvent, 'event object is a shallow clone of original');
+            assert.isOk(_.isObject(event) && event !== originalEvent, 'event object is a shallow clone of original');
         });
 
         api.trigger('test', originalEvent);
@@ -164,42 +155,47 @@ define([
         assert.equal(originalEvent.type, 'original', 'original event.type is not modified');
     });
 
-    test('defines expected methods', function(assert) {
-        var api = createApi('player');
+    it('defines expected methods', function() {
+        const api = createApi('player');
+        _.each(apiMethods, (args, method) => {
+            expect(api[method], method).to.be.a('function', 'api.' + method + ' is defined');
+        });
+    });
 
-        _.each(apiMethods, function(args, method) {
-            assert.ok(_.isFunction(api[method]), 'api.' + method + ' is defined');
+    it('does not recognize deprecated methods', function() {
+        const api = createApi('player');
+
+        _.each(apiMethodsDeprecated, (args, method) => {
+            assert.isNotOk(_.isFunction(api[method]), 'deprecated api.' + method + ' is not defined');
+        });
+    });
+
+    it('defines expected members', function() {
+        const api = createApi('player');
+        _.each(apiMembers, (value, member) => {
+            const actualType = (typeof api[member]);
+            const expectedType = (typeof value);
+            assert.equal(actualType, expectedType, 'api.' + member + ' is a ' + expectedType);
         });
 
     });
 
-    test('defines expected members', function(assert) {
-        var api = createApi('player');
+    it('does not contain unexpected members or methods', function() {
+        const api = createApi('player');
 
-        _.each(apiMembers, function(value, member) {
-            var actualType = (typeof api[member]);
-            var expectedType = (typeof value);
-            assert.equal(actualType, expectedType, 'api.' + member + ' is a '+ expectedType);
-        });
+        _.each(api, (args, property) => {
+            const isApiMethod = apiMethods.hasOwnProperty(property);
+            const isApiMember = apiMembers.hasOwnProperty(property);
 
-    });
-
-    test('does not contain unexpected members or methods', function(assert) {
-        var api = createApi('player');
-
-        _.each(api, function(args, property) {
-            var isApiMethod = apiMethods.hasOwnProperty(property);
-            var isApiMember = apiMembers.hasOwnProperty(property);
-
-            var message = '"'+ property +'" is XXX of api';
+            const message = '"' + property + '" is XXX of api';
 
             if (isApiMethod) {
-                assert.ok(true, message.replace('XXX', 'a method'));
+                assert.isOk(true, message.replace('XXX', 'a method'));
             } else if (isApiMember) {
-                assert.ok(true, message.replace('XXX', 'a member'));
+                assert.isOk(true, message.replace('XXX', 'a member'));
             } else {
-                var expectedMessage = 'api.'+ property +' is undefined';
-                var actualdMessage = 'api.'+ property +' is a '+ (typeof api[property]);
+                const expectedMessage = 'api.' + property + ' is undefined';
+                const actualdMessage = 'api.' + property + ' is a ' + (typeof api[property]);
                 assert.equal(actualdMessage, expectedMessage, message.replace('XXX', 'not part') +
                     '. Is this a new API method or member?');
             }
@@ -208,155 +204,137 @@ define([
 
     });
 
-    test('has chainable methods', function(assert) {
-        var api = createApi('player');
+    it('has chainable methods', function() {
+        const api = createApi('player');
 
-        _.each(apiMethodsChainable, function(args, method) {
-            var fn = api[method];
-            assert.ok(_.isFunction(fn), 'api.' + method + ' is defined');
+        _.each(apiMethodsChainable, (args, method) => {
+            const fn = api[method];
+            assert.isOk(_.isFunction(fn), 'api.' + method + ' is defined');
 
-            var result;
+            let result;
             try {
                 result = fn.apply(api, args);
-            } catch(e) {
-                var expectedMessage = method +' does not throw an error';
-                assert.equal(method +' threw an error', expectedMessage, expectedMessage +':'+ e.message);
+            } catch (e) {
+                const expectedMessage = method + ' does not throw an error';
+                assert.equal(method + ' threw an error', expectedMessage, expectedMessage + ':' + e.message);
             }
 
             assert.strictEqual(result, api, 'api.' + method + ' returns an instance of itself');
         });
     });
 
-    test('has getters that return values before setup', function(assert) {
-        var api = createApi('player');
-
-        assert.strictEqual(api.getContainer(), document.getElementById('player'),
-            'getContainer returns the player DOM element before setup');
-
-
-        var result = api.registerPlugin('', '7.0', function(){});
-        assert.strictEqual(result, undefined, 'registerPlugin returns undefined');
-
-        assert.deepEqual( api.getMeta(), {}, 'getMeta returns {}');
-        assert.strictEqual( api.getItem(), undefined, 'getItem returns undefined');
-        assert.strictEqual( api.getPlaylist(), undefined, 'getPlaylist returns undefined');
-        assert.strictEqual( api.getPlaylistItem(), undefined, 'getPlaylistItem() returns undefined');
-        assert.strictEqual( api.getPlaylistItem(0), null, 'getPlaylistItem(0) returns null');
-
-        // FIXME: These are not ready until after setup (controller.setup())
-        //api.qoe();
-        //api.createInstream();
-        //assert.strictEqual( api.getState(), undefined, 'getState returns undefined before setup');
-
-    });
-
-    test('has methods that can only be called after setup', function(assert) {
-        var done = assert.async();
-
-        var api = createApi('player');
-
-        var meta = api.getMeta();
-
-        var config = _.extend(configSmall, {
-            events: {
-                onReady: function() {
-                    assert.ok(true, 'config.onReady event handler called after setup');
+    it('has methods which can be invoked before setup', function() {
+        const api = createApi('player');
+        _.each(apiMethods, (args, method) => {
+            // do not invoke methods on the prototype (only `core` methods assigned in the constructor)
+            if (Object.prototype.hasOwnProperty.call(api, method)) {
+                if (method === 'setup') {
+                    return;
                 }
+                expect(api[method].bind(api), method).to.not.throw();
             }
-        });
-
-        api.setup(config).on('ready', function(e) {
-
-            assert.ok(true,
-                'ready event fired after setup');
-
-            var qoe = api.qoe();
-
-            assert.equal(e.setupTime, qoe.setupTime,
-                'ready event setup time equals QOE setup time');
-
-            assert.notEqual(api.getMeta(), meta,
-                'item meta is reset on ready');
-
-            assert.strictEqual(api.getContainer(), document.getElementById('player'),
-                'getContainer returns the player DOM element after setup');
-
-            assert.equal(api.getPlaylistItem().file, configSmall.file,
-                'getPlaylistItem() returns an object with the file passed to setup');
-
-            assert.equal(api.getPlaylistItem(0).file, configSmall.file,
-                'getPlaylistItem(0) returns an object with the file passed to setup');
-
-            assert.strictEqual( api.getPlaylistIndex(), 0,
-                'getPlaylistIndex aliases getItem after setup');
-
-            assert.strictEqual( api.callInternal, undefined,
-                'deprecated method callInternal has been removed');
-
-            assert.ok(typeof api.createInstream() === 'object',
-                'createInstream returns an object after setup');
-
-            assert.equal(api.getState(), 'idle',
-                'getState returns idle after setup');
-
-            api.setVolume(50);
-            assert.strictEqual(api.getVolume(), 50,
-                'after calling setVolume(50), getVolume returns 50');
-
-            api.play(true);
-
-            if (BROWSER_SUPPORTS_VIDEO) {
-                var state = api.getState();
-                assert.ok(/buffering|playing/.test(state),
-                    'getState['+state+'] should be buffering or playing after play is called');
-            }
-
-            // Cover these code branches
-            // TODO: test play/pause (true|false|undefined)
-            api.play();
-            api.pause();
-            api.pause(true);
-
-            assert.ok(api.getState(), 'paused',
-                'getState is paused after pause is called');
-
-            api.castToggle();
-
-            done();
-        }).on('setupError', function() {
-            assert.ok(false, 'FAIL');
-            done();
         });
     });
 
-    test('queues commands called after setup before ready', function(assert) {
-        var done = assert.async();
+    it('has getters that return values before setup', function() {
+        const container = createContainer('player');
+        const api = new Api(container);
 
-        var api = createApi('player');
-
-        var config = _.extend(configSmall, {});
-
-        api.setup(config)
-            .play()
-            .pause()
-            .on('ready', function() {
-                assert.ok(true, 'ready event fired after setup');
-                done();
-            }).on('setupError', function() {
-                assert.ok(false, 'FAIL');
-                done();
-            });
+        expect(api.qoe(), '.qoe()').to.have.keys(['setupTime', 'firstFrame', 'player', 'item']);
+        expect(api.getEnvironment(), '.getEnvironment()').to.have.keys(['Browser', 'OS', 'Features']);
+        expect(api.getContainer(), '.getContainer()').to.equal(container, 'returns the player DOM element before setup');
+        expect(api.getConfig(), '.getConfig()').to.eql({});
+        expect(api.getAudioTracks(), '.getAudioTracks()').to.equal(null);
+        expect(api.getCaptionsList(), '.getCaptionsList()').to.equal(null);
+        expect(api.getQualityLevels(), '.getQualityLevels()').to.equal(null);
+        expect(api.getVisualQuality(), '.getVisualQuality()').to.equal(null);
+        expect(api.getCurrentAudioTrack(), '.getCurrentAudioTrack()').to.equal(-1);
+        expect(api.getCurrentQuality(), '.getCurrentQuality()').to.equal(-1);
+        expect(api.isBeforePlay(), '.isBeforePlay()').to.be.false;
+        expect(api.isBeforeComplete(), '.isBeforeComplete()').to.be.false;
+        expect(api.getSafeRegion(), '.getSafeRegion()').to.eql({
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0
+        });
+        expect(api.getBuffer(), '.getBuffer()').to.equal(undefined);
+        expect(api.getDuration(), '.getDuration()').to.equal(undefined);
+        expect(api.getCaptions(), '.getCaptions()').to.equal(undefined);
+        expect(api.getControls(), '.getControls()').to.equal(undefined);
+        expect(api.getCurrentCaptions(), '.getCurrentCaptions()').to.equal(undefined);
+        expect(api.getFullscreen(), '.getFullscreen()').to.equal(undefined);
+        expect(api.getHeight(), '.getHeight()').to.equal(undefined);
+        expect(api.getWidth(), '.getWidth()').to.equal(undefined);
+        expect(api.getItemMeta(), '.getItemMeta()').to.eql({});
+        expect(api.getMute(), '.getMute()').to.equal(undefined);
+        expect(api.getVolume(), '.getVolume()').to.equal(undefined);
+        expect(api.getPlaybackRate(), '.getPlaybackRate()').to.equal(undefined);
+        expect(api.getPlaylist(), '.getPlaylist()').to.equal(undefined);
+        expect(api.getPlaylistIndex(), '.getPlaylistIndex()').to.equal(undefined);
+        expect(api.getPlaylistItem(), '.getPlaylistItem()').to.equal(undefined, 'getPlaylistItem() returns undefined');
+        expect(api.getPlaylistItem(0)).to.equal(null, 'getPlaylistItem(0) returns null');
+        expect(api.getPosition(), '.getPosition()').to.equal(undefined);
+        expect(api.getProvider(), '.getProvider()').to.equal(undefined);
+        expect(api.getState(), '.getState()').to.equal(undefined);
+        expect(api.getStretching(), '.getStretching()').to.equal(undefined);
+        expect(api.getViewable(), '.getViewable()').to.equal(undefined);
+        expect(api.registerPlugin('foobar')).to.equal(undefined, 'registerPlugin returns undefined');
     });
 
-    function createApi(id, globalRemoveCallback) {
-        var container = createContainer(id);
-        return new Api(container, globalRemoveCallback || _.noop);
+    it('has getters that return values after setup, before ready', function() {
+        const container = createContainer('player');
+        const api = new Api(container);
+
+        api.setup({});
+
+        expect(api.qoe(), '.qoe()').to.have.keys(['setupTime', 'firstFrame', 'player', 'item']);
+        expect(api.getEnvironment(), '.getEnvironment()').to.have.keys(['Browser', 'OS', 'Features']);
+        expect(api.getContainer(), '.getContainer()').to.equal(container, 'returns the player DOM element before setup');
+        expect(api.getConfig(), '.getConfig()').to.not.be.empty;
+        expect(api.getAudioTracks(), '.getAudioTracks()').to.equal(null);
+        expect(api.getCaptionsList(), '.getCaptionsList()').to.equal(null);
+        expect(api.getQualityLevels(), '.getQualityLevels()').to.equal(null);
+        expect(api.getVisualQuality(), '.getVisualQuality()').to.equal(null);
+        expect(api.getCurrentAudioTrack(), '.getCurrentAudioTrack()').to.equal(-1);
+        expect(api.getCurrentQuality(), '.getCurrentQuality()').to.equal(-1);
+        expect(api.isBeforePlay(), '.isBeforePlay()').to.be.false;
+        expect(api.isBeforeComplete(), '.isBeforeComplete()').to.be.false;
+        expect(api.getSafeRegion(), '.getSafeRegion()').to.eql({
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0
+        });
+        expect(api.getBuffer(), '.getBuffer()').to.equal(0);
+        expect(api.getDuration(), '.getDuration()').to.equal(0);
+        expect(api.getCaptions(), '.getCaptions()').to.equal(undefined);
+        expect(api.getControls(), '.getControls()').to.equal(true);
+        expect(api.getCurrentCaptions(), '.getCurrentCaptions()').to.equal(undefined);
+        expect(api.getFullscreen(), '.getFullscreen()').to.equal(undefined);
+        expect(api.getHeight(), '.getHeight()').to.equal(undefined);
+        expect(api.getWidth(), '.getWidth()').to.equal(undefined);
+        expect(api.getItemMeta(), '.getItemMeta()').to.eql({});
+        expect(api.getMute(), '.getMute()').to.be.a('boolean');
+        expect(api.getVolume(), '.getVolume()').to.be.a('number');
+        expect(api.getPlaybackRate(), '.getPlaybackRate()').to.equal(1);
+        expect(api.getPlaylist(), '.getPlaylist()').to.be.an('array');
+        expect(api.getPlaylistIndex(), '.getPlaylistIndex()').to.equal(0);
+        expect(api.getPlaylistItem(), '.getPlaylistItem()').to.equal(undefined, 'getPlaylistItem() returns undefined');
+        expect(api.getPlaylistItem(0)).to.be.an('object', 'getPlaylistItem(0) returns an object');
+        expect(api.getPosition(), '.getPosition()').to.equal(0);
+        expect(api.getProvider(), '.getProvider()').to.equal(undefined);
+        expect(api.getState(), '.getState()').to.equal('idle');
+        expect(api.getStretching(), '.getStretching()').to.equal('uniform');
+        expect(api.getViewable(), '.getViewable()').to.equal(undefined);
+    });
+
+    function createApi(id) {
+        const container = createContainer(id);
+        return new Api(container);
     }
 
     function createContainer(id) {
-        var container = $('<div id="' + id + '"></div>')[0];
-        $('#qunit-fixture').append(container);
-        return container;
+        return $('<div id="' + id + '"></div>')[0];
     }
-
 });
